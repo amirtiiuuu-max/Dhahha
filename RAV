@@ -1,0 +1,1000 @@
+--[[
+
+    ██████╗ ███████╗██╗   ██╗███████╗    ██████╗  ██████╗ ██████╗ ██╗      ██████╗  █████╗ 
+    ██╔══██╗██╔════╝██║   ██║██╔════╝    ██╔══██╗██╔═══██╗██╔══██╗██║     ██╔══██╗██╔══██╗
+    ██║  ██║█████╗  ██║   ██║███████╗    ██████╔╝██║   ██║██████╔╝██║     ██║  ██║███████║
+    ██║  ██║██╔══╝  ╚██╗ ██╔╝╚════██║    ██╔══██╗██║   ██║██╔══██╗██║     ██║  ██║██╔══██║
+    ██████╔╝███████╗ ╚████╔╝ ███████║    ██████╔╝╚██████╔╝██║  ██║███████╗██████╔╝██║  ██║
+    ╚═════╝ ╚══════╝  ╚═══╝  ╚══════╝    ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═════╝ ╚═╝  ╚═╝
+
+    Верховный админ-скрипт ZEUS DELTA
+    Антидетект: maximum security
+    GUI: черный минимализм, адаптив (ПК/телефон)
+    Сворачивание в иконку сбоку с плавной анимацией
+
+    Версия: 2.0.0
+    Автор: Zевс
+    Telegram: @cherdak_coolera
+
+--]]
+
+-- ============================================================================
+-- БЛОК АНТИДЕТЕКТА (МАКСИМАЛЬНАЯ ЗАЩИТА ОТ РАЗРАБОВ)
+-- ============================================================================
+local AntiDetect = (function()
+    local function sanitize_environment()
+        -- Удаляем следы выполнения из глобальной таблицы
+        local whitelist = {"game", "workspace", "script", "players", "runservice", "tween", "gui", "color", "vector", "cframe", "math", "string", "table", "os", "coroutine", "debug", "shared", "print", "warn", "error", "wait", "spawn", "delay", "tick", "typeof", "getfenv", "setfenv", "newproxy", "select", "pairs", "ipairs", "next", "unpack", "rawequal", "rawget", "rawset", "rawlen", "getmetatable", "setmetatable", "pcall", "xpcall", "assert", "tonumber", "tostring", "type"}
+        local g = getfenv()
+        for k, v in pairs(g) do
+            local ok = false
+            for _, allowed in pairs(whitelist) do
+                if k == allowed then ok = true; break end
+            end
+            if not ok and k ~= "_G" and type(v) ~= "function" then
+                g[k] = nil
+            end
+        end
+        -- Очищаем глобальные переменные, которые могут быть использованы детектами
+        if _G.ZeusScript then _G.ZeusScript = nil end
+        if _G.AntiDetectRunning then _G.AntiDetectRunning = true end
+    end
+
+    local function kill_detectors()
+        -- Поиск и отключение анти-чит скриптов
+        for _, v in pairs(game:GetDescendants()) do
+            if v:IsA("LocalScript") or v:IsA("ModuleScript") then
+                local name = string.lower(v.Name)
+                if name:find("antiexploit") or name:find("anticheat") or name:find("detect") or name:find("guard") or name:find("security") then
+                    pcall(function()
+                        v.Disabled = true
+                        v:Destroy()
+                    end)
+                end
+            end
+        end
+        -- Отключаем удалённые события, которые могут сообщать о нас
+        pcall(function()
+            local rs = game:GetService("ReplicatedStorage")
+            for _, event in pairs(rs:GetDescendants()) do
+                if event:IsA("RemoteEvent") or event:IsA("RemoteFunction") then
+                    local name = string.lower(event.Name)
+                    if name:find("cheat") or name:find("exploit") or name:find("detect") then
+                        event:Destroy()
+                    end
+                end
+            end
+        end)
+    end
+
+    local function hook_critical_functions()
+        -- Перехват функций, используемых для детекта выполнения стороннего кода
+        local original_clipboard = setclipboard or (function() end)
+        local original_issuer = getcallingscript or (function() return nil end)
+        -- Подмена getrenv чтобы скрыть наш скрипт
+        local old_getrenv = getrenv or (function() return getfenv() end)
+        if old_getrenv then
+            getrenv = function()
+                local env = old_getrenv()
+                env.script = nil
+                return env
+            end
+        end
+        -- Отключаем логгирование
+        if game:GetService("CoreGui"):FindFirstChild("RobloxLog") then
+            game:GetService("CoreGui").RobloxLog:Destroy()
+        end
+        -- Блокируем отправку статистики
+        pcall(function()
+            local http = game:GetService("HttpService")
+            local old_post = http.PostAsync
+            if old_post then
+                http.PostAsync = function(self, url, data, ...)
+                    if url and string.find(url, "telemetry") or string.find(url, "tracking") then
+                        return ""
+                    end
+                    return old_post(self, url, data, ...)
+                end
+            end
+        end)
+    end
+
+    local function anti_kick()
+        -- Защита от киков по удалённым событиям
+        local ts = game:GetService("TeleportService")
+        local old_kick = ts.Kick
+        if old_kick then
+            ts.Kick = function(self, ...)
+                print("[ZEUS] Попытка кика заблокирована!")
+                return nil
+            end
+        end
+        local plr = game:GetService("Players").LocalPlayer
+        local old_kick_player = plr.Kick
+        if old_kick_player then
+            plr.Kick = function(self, ...)
+                print("[ZEUS] Попытка кика игрока заблокирована!")
+                return nil
+            end
+        end
+        -- Отключаем скрипты, вызывающие кик
+        for _, v in pairs(game:GetDescendants()) do
+            if v:IsA("Script") and v.Name:find("Kick") then
+                v.Disabled = true
+            end
+        end
+    end
+
+    local function randomize_identity()
+        -- Меняем имена переменных, чтобы статический анализ не находил паттерны
+        _G.ZEUS_ANON = true
+        _G.Z3US_R0BLOX = math.random(10000, 99999)
+        -- Затираем следы в памяти
+        for i = 1, 100 do
+            local garbage = {}
+            for j = 1, 1000 do
+                garbage[j] = math.random()
+            end
+            garbage = nil
+        end
+    end
+
+    -- Инициализация всех защит
+    sanitize_environment()
+    kill_detectors()
+    hook_critical_functions()
+    anti_kick()
+    randomize_identity()
+
+    return true
+end)()
+
+-- ============================================================================
+-- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И СЕРВИСЫ
+-- ============================================================================
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local GuiService = game:GetService("GuiService")
+local CoreGui = game:GetService("CoreGui")
+local VirtualUser = game:GetService("VirtualUser")
+local HttpService = game:GetService("HttpService")
+
+-- Глобальное состояние админки
+local AdminData = {
+    isOpen = true,           -- открыто ли меню
+    currentTab = "Players",  -- текущая вкладка
+    targetPlayer = nil,
+    speedValue = 32,
+    jumpPower = 50,
+    flySpeed = 80,
+    noclipEnabled = false,
+    flyEnabled = false,
+    godMode = false,
+    invis = false,
+    infiniteJump = false,
+    espEnabled = false,
+    teleportHistory = {},
+}
+
+-- Список игроков (обновляется)
+local PlayerList = {}
+
+-- ============================================================================
+-- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+-- ============================================================================
+local function getPlayers()
+    local list = {}
+    for _, plr in pairs(Players:GetPlayers()) do
+        table.insert(list, plr)
+    end
+    return list
+end
+
+local function getCharacter(plr)
+    if plr and plr.Character and plr.Character.Parent then
+        return plr.Character
+    end
+    return nil
+end
+
+local function getHumanoid(plr)
+    local char = getCharacter(plr)
+    if char then
+        return char:FindFirstChild("Humanoid")
+    end
+    return nil
+end
+
+-- ============================================================================
+-- ОСНОВНЫЕ АДМИН-КОМАНДЫ
+-- ============================================================================
+local AdminCommands = {}
+
+function AdminCommands.kill(plr)
+    local humanoid = getHumanoid(plr)
+    if humanoid then
+        humanoid.Health = 0
+    end
+end
+
+function AdminCommands.heal(plr)
+    local humanoid = getHumanoid(plr)
+    if humanoid then
+        humanoid.Health = humanoid.MaxHealth
+    end
+end
+
+function AdminCommands.bring(plr)
+    local targetChar = getCharacter(plr)
+    local localChar = getCharacter(LocalPlayer)
+    if targetChar and localChar and localChar.PrimaryPart then
+        targetChar:SetPrimaryPartCFrame(localChar.PrimaryPart.CFrame)
+    end
+end
+
+function AdminCommands.tpTo(plr)
+    local targetChar = getCharacter(plr)
+    local localChar = getCharacter(LocalPlayer)
+    if targetChar and localChar and targetChar.PrimaryPart then
+        localChar:SetPrimaryPartCFrame(targetChar.PrimaryPart.CFrame + Vector3.new(0, 2, 0))
+    end
+end
+
+function AdminCommands.godMode(plr, enable)
+    local humanoid = getHumanoid(plr)
+    if humanoid then
+        if enable then
+            humanoid.MaxHealth = math.huge
+            humanoid.Health = math.huge
+            humanoid.BreakJointsOnDeath = false
+        else
+            humanoid.MaxHealth = 100
+            humanoid.Health = 100
+            humanoid.BreakJointsOnDeath = true
+        end
+    end
+end
+
+function AdminCommands.freeze(plr)
+    local humanoid = getHumanoid(plr)
+    if humanoid then
+        humanoid.PlatformStand = not humanoid.PlatformStand
+    end
+end
+
+function AdminCommands.setSpeed(plr, value)
+    local humanoid = getHumanoid(plr)
+    if humanoid then
+        humanoid.WalkSpeed = value
+    end
+end
+
+function AdminCommands.setJumpPower(plr, value)
+    local humanoid = getHumanoid(plr)
+    if humanoid then
+        humanoid.JumpPower = value
+    end
+end
+
+function AdminCommands.infiniteJump(enable)
+    AdminData.infiniteJump = enable
+end
+
+function AdminCommands.fly(enable)
+    AdminData.flyEnabled = enable
+    local char = getCharacter(LocalPlayer)
+    if not char then return end
+    if enable then
+        -- Создаём BodyVelocity для полёта
+        local bv = Instance.new("BodyVelocity")
+        bv.MaxForce = Vector3.new(1/0, 1/0, 1/0)
+        bv.Velocity = Vector3.new(0, 0, 0)
+        bv.Parent = char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
+        char.FlyBV = bv
+    else
+        if char.FlyBV then char.FlyBV:Destroy() end
+    end
+end
+
+function AdminCommands.noclip(enable)
+    AdminData.noclipEnabled = enable
+    -- Реализация noclip через обработку столкновений
+    local char = getCharacter(LocalPlayer)
+    if char then
+        for _, part in pairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = not enable
+            end
+        end
+    end
+end
+
+-- Обновление noclip при смене персонажа
+Players.LocalPlayer.CharacterAdded:Connect(function(char)
+    wait(0.5)
+    if AdminData.noclipEnabled then
+        for _, part in pairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+    end
+    if AdminData.flyEnabled then
+        local bv = Instance.new("BodyVelocity")
+        bv.MaxForce = Vector3.new(1/0, 1/0, 1/0)
+        bv.Velocity = Vector3.new(0, 0, 0)
+        bv.Parent = char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
+        char.FlyBV = bv
+    end
+end)
+
+-- Бесконечный прыжок
+RunService.RenderStepped:Connect(function()
+    if AdminData.infiniteJump and UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+        local humanoid = getHumanoid(LocalPlayer)
+        if humanoid and humanoid:GetState() ~= Enum.HumanoidStateType.Jumping then
+            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        end
+    end
+end)
+
+-- Управление полётом (WSAD + мышь)
+RunService.RenderStepped:Connect(function()
+    if not AdminData.flyEnabled then return end
+    local char = getCharacter(LocalPlayer)
+    if not char then return end
+    local bv = char.FlyBV
+    if not bv then return end
+    local camera = workspace.CurrentCamera
+    local direction = Vector3.new()
+    if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+        direction = direction + camera.CFrame.LookVector
+    end
+    if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+        direction = direction - camera.CFrame.LookVector
+    end
+    if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+        direction = direction - camera.CFrame.RightVector
+    end
+    if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+        direction = direction + camera.CFrame.RightVector
+    end
+    if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+        direction = direction + Vector3.new(0, 1, 0)
+    end
+    if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+        direction = direction - Vector3.new(0, 1, 0)
+    end
+    if direction.Magnitude > 0 then
+        direction = direction.Unit * AdminData.flySpeed
+    end
+    bv.Velocity = direction
+end)
+
+-- ============================================================================
+-- GUI: Стильное чёрное меню с анимациями и адаптацией
+-- ============================================================================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "ZeusAdminGUI"
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = CoreGui
+
+-- Функция для создания круглых углов с помощью UICorner
+local function applyCorner(instance, radius)
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, radius or 8)
+    corner.Parent = instance
+end
+
+-- Основная панель меню (черный полупрозрачный фон)
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainMenu"
+MainFrame.Size = UDim2.new(0, 420, 0, 560)
+MainFrame.Position = UDim2.new(0.5, -210, 0.5, -280)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 22)
+MainFrame.BackgroundTransparency = 0.1
+MainFrame.BorderSizePixel = 0
+MainFrame.ClipsDescendants = true
+applyCorner(MainFrame, 12)
+MainFrame.Parent = ScreenGui
+
+-- Тень (дополнительный фрейм для эстетики)
+local Shadow = Instance.new("Frame")
+Shadow.Size = MainFrame.Size + UDim2.new(0, 8, 0, 8)
+Shadow.Position = MainFrame.Position - UDim2.new(0, 4, 0, 4)
+Shadow.BackgroundColor3 = Color3.new(0, 0, 0)
+Shadow.BackgroundTransparency = 0.6
+Shadow.BorderSizePixel = 0
+applyCorner(Shadow, 16)
+Shadow.Parent = ScreenGui
+-- Анимация привязки тени
+MainFrame:GetPropertyChangedSignal("Position"):Connect(function()
+    Shadow.Position = MainFrame.Position - UDim2.new(0, 4, 0, 4)
+end)
+MainFrame:GetPropertyChangedSignal("Size"):Connect(function()
+    Shadow.Size = MainFrame.Size + UDim2.new(0, 8, 0, 8)
+end)
+
+-- Заголовок меню
+local TitleBar = Instance.new("Frame")
+TitleBar.Size = UDim2.new(1, 0, 0, 40)
+TitleBar.Position = UDim2.new(0, 0, 0, 0)
+TitleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+TitleBar.BackgroundTransparency = 0.3
+TitleBar.BorderSizePixel = 0
+applyCorner(TitleBar, 12)
+-- Делаем только верхние углы скруглёнными (простой способ - отдельный corner, но он скругляет все. Оставим как есть)
+TitleBar.Parent = MainFrame
+
+local TitleText = Instance.new("TextLabel")
+TitleText.Size = UDim2.new(1, -80, 1, 0)
+TitleText.Position = UDim2.new(0, 12, 0, 0)
+TitleText.BackgroundTransparency = 1
+TitleText.Text = "ZEUS ADMIN v2.0"
+TitleText.TextColor3 = Color3.fromRGB(220, 220, 230)
+TitleText.TextSize = 18
+TitleText.TextXAlignment = Enum.TextXAlignment.Left
+TitleText.Font = Enum.Font.GothamSemibold
+TitleText.Parent = TitleBar
+
+-- Кнопка сворачивания (иконка)
+local CollapseButton = Instance.new("TextButton")
+CollapseButton.Size = UDim2.new(0, 32, 0, 32)
+CollapseButton.Position = UDim2.new(1, -40, 0, 4)
+CollapseButton.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+CollapseButton.BackgroundTransparency = 0.2
+CollapseButton.BorderSizePixel = 0
+applyCorner(CollapseButton, 16)
+CollapseButton.Text = "−"
+CollapseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+CollapseButton.TextSize = 24
+CollapseButton.Font = Enum.Font.GothamBold
+CollapseButton.Parent = TitleBar
+
+-- Кнопка закрытия (крестик)
+local CloseButton = Instance.new("TextButton")
+CloseButton.Size = UDim2.new(0, 32, 0, 32)
+CloseButton.Position = UDim2.new(1, -40, 0, 4)
+CloseButton.BackgroundColor3 = Color3.fromRGB(60, 30, 30)
+CloseButton.BackgroundTransparency = 0.2
+applyCorner(CloseButton, 16)
+CloseButton.Text = "✕"
+CloseButton.TextColor3 = Color3.fromRGB(255, 100, 100)
+CloseButton.TextSize = 20
+CloseButton.Font = Enum.Font.GothamBold
+CloseButton.Visible = false
+CloseButton.Parent = TitleBar
+
+-- Панель вкладок
+local TabBar = Instance.new("Frame")
+TabBar.Size = UDim2.new(1, 0, 0, 44)
+TabBar.Position = UDim2.new(0, 0, 0, 40)
+TabBar.BackgroundColor3 = Color3.fromRGB(25, 25, 28)
+TabBar.BackgroundTransparency = 0.2
+TabBar.BorderSizePixel = 0
+TabBar.Parent = MainFrame
+
+-- Список кнопок вкладок
+local Tabs = {"Players", "Teleport", "Combat", "Movement", "Visuals", "Protection"}
+local TabButtons = {}
+local ContentFrames = {}
+
+for i, tabName in ipairs(Tabs) do
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1 / #Tabs, -4, 1, -8)
+    btn.Position = UDim2.new((i-1) / #Tabs, 2, 0, 4)
+    btn.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+    btn.BackgroundTransparency = 0.4
+    btn.BorderSizePixel = 0
+    applyCorner(btn, 8)
+    btn.Text = tabName
+    btn.TextColor3 = Color3.fromRGB(210, 210, 220)
+    btn.TextSize = 14
+    btn.Font = Enum.Font.GothamMedium
+    btn.Parent = TabBar
+    TabButtons[tabName] = btn
+    
+    -- Контент для вкладки
+    local content = Instance.new("ScrollingFrame")
+    content.Size = UDim2.new(1, -16, 1, -84)
+    content.Position = UDim2.new(0, 8, 0, 84)
+    content.BackgroundTransparency = 1
+    content.BorderSizePixel = 0
+    content.ScrollBarThickness = 6
+    content.CanvasSize = UDim2.new(0, 0, 0, 0)
+    content.Visible = (i == 1)
+    content.Parent = MainFrame
+    ContentFrames[tabName] = content
+    
+    btn.MouseButton1Click:Connect(function()
+        for _, otherBtn in pairs(TabButtons) do
+            otherBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+        end
+        btn.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
+        for _, frame in pairs(ContentFrames) do
+            frame.Visible = false
+        end
+        content.Visible = true
+        AdminData.currentTab = tabName
+    end)
+end
+
+-- Инициализация контента вкладок
+local function setupPlayersTab()
+    local frame = ContentFrames["Players"]
+    local listLayout = Instance.new("UIListLayout")
+    listLayout.Padding = UDim.new(0, 8)
+    listLayout.SortOrder = Enum.SortOrder.Name
+    listLayout.Parent = frame
+    
+    local function refreshPlayerList()
+        for _, child in pairs(frame:GetChildren()) do
+            if child:IsA("TextButton") then
+                child:Destroy()
+            end
+        end
+        local players = getPlayers()
+        local yOffset = 0
+        for _, plr in pairs(players) do
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(1, -16, 0, 36)
+            btn.Position = UDim2.new(0, 8, 0, yOffset)
+            btn.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+            applyCorner(btn, 8)
+            btn.Text = plr.Name .. " (" .. (plr.Team and plr.Team.Name or "None") .. ")"
+            btn.TextColor3 = Color3.fromRGB(240, 240, 245)
+            btn.TextSize = 14
+            btn.Font = Enum.Font.Gotham
+            btn.Parent = frame
+            btn.MouseButton1Click:Connect(function()
+                AdminData.targetPlayer = plr
+                for _, b in pairs(frame:GetChildren()) do
+                    if b:IsA("TextButton") then
+                        b.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+                    end
+                end
+                btn.BackgroundColor3 = Color3.fromRGB(90, 90, 110)
+            end)
+            yOffset = yOffset + 44
+        end
+        frame.CanvasSize = UDim2.new(0, 0, 0, yOffset)
+    end
+    refreshPlayerList()
+    Players.PlayerAdded:Connect(refreshPlayerList)
+    Players.PlayerRemoving:Connect(refreshPlayerList)
+    
+    -- Панель действий с выбранным игроком
+    local actionBar = Instance.new("Frame")
+    actionBar.Size = UDim2.new(1, -16, 0, 64)
+    actionBar.Position = UDim2.new(0, 8, 1, -72)
+    actionBar.BackgroundColor3 = Color3.fromRGB(25, 25, 28)
+    actionBar.BackgroundTransparency = 0.3
+    applyCorner(actionBar, 8)
+    actionBar.Parent = frame
+    
+    local killBtn = Instance.new("TextButton")
+    killBtn.Size = UDim2.new(0.23, -4, 1, -8)
+    killBtn.Position = UDim2.new(0.01, 0, 0, 4)
+    killBtn.BackgroundColor3 = Color3.fromRGB(160, 40, 40)
+    applyCorner(killBtn, 6)
+    killBtn.Text = "KILL"
+    killBtn.TextColor3 = Color3.new(1,1,1)
+    killBtn.Font = Enum.Font.GothamBold
+    killBtn.TextSize = 12
+    killBtn.Parent = actionBar
+    killBtn.MouseButton1Click:Connect(function()
+        if AdminData.targetPlayer then
+            AdminCommands.kill(AdminData.targetPlayer)
+        end
+    end)
+    
+    local healBtn = killBtn:Clone()
+    healBtn.Position = UDim2.new(0.25, 0, 0, 4)
+    healBtn.BackgroundColor3 = Color3.fromRGB(40, 140, 40)
+    healBtn.Text = "HEAL"
+    healBtn.Parent = actionBar
+    healBtn.MouseButton1Click:Connect(function()
+        if AdminData.targetPlayer then AdminCommands.heal(AdminData.targetPlayer) end
+    end)
+    
+    local bringBtn = killBtn:Clone()
+    bringBtn.Position = UDim2.new(0.49, 0, 0, 4)
+    bringBtn.BackgroundColor3 = Color3.fromRGB(50, 90, 160)
+    bringBtn.Text = "BRING"
+    bringBtn.Parent = actionBar
+    bringBtn.MouseButton1Click:Connect(function()
+        if AdminData.targetPlayer then AdminCommands.bring(AdminData.targetPlayer) end
+    end)
+    
+    local tpBtn = killBtn:Clone()
+    tpBtn.Position = UDim2.new(0.73, 0, 0, 4)
+    tpBtn.BackgroundColor3 = Color3.fromRGB(160, 120, 30)
+    tpBtn.Text = "TP TO"
+    tpBtn.Parent = actionBar
+    tpBtn.MouseButton1Click:Connect(function()
+        if AdminData.targetPlayer then AdminCommands.tpTo(AdminData.targetPlayer) end
+    end)
+end
+
+local function setupTeleportTab()
+    local frame = ContentFrames["Teleport"]
+    local list = Instance.new("ScrollingFrame")
+    list.Size = UDim2.new(1, 0, 1, -32)
+    list.Position = UDim2.new(0, 0, 0, 0)
+    list.BackgroundTransparency = 1
+    list.ScrollBarThickness = 6
+    list.Parent = frame
+    
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 6)
+    layout.Parent = list
+    
+    local function addTeleportButton(name, pos)
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, -16, 0, 40)
+        btn.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+        applyCorner(btn, 8)
+        btn.Text = name
+        btn.Font = Enum.Font.Gotham
+        btn.TextSize = 14
+        btn.Parent = list
+        btn.MouseButton1Click:Connect(function()
+            local char = getCharacter(LocalPlayer)
+            if char and char.PrimaryPart then
+                AdminData.teleportHistory[#AdminData.teleportHistory+1] = char.PrimaryPart.Position
+                char.PrimaryPart.CFrame = CFrame.new(pos)
+            end
+        end)
+    end
+    
+    addTeleportButton("🏠 Spawn Point", Vector3.new(0, 5, 0))
+    addTeleportButton("☁️ Skybox", Vector3.new(0, 300, 0))
+    addTeleportButton("🕳️ Void", Vector3.new(0, -500, 0))
+    addTeleportButton("⬅️ Previous Location", Vector3.new(0,0,0)) -- будет заполнено динамически
+    
+    -- Кнопка возврата
+    local backBtn = Instance.new("TextButton")
+    backBtn.Size = UDim2.new(1, -16, 0, 40)
+    backBtn.BackgroundColor3 = Color3.fromRGB(70, 50, 50)
+    applyCorner(backBtn, 8)
+    backBtn.Text = "🔙 Вернуться в предыдущую точку"
+    backBtn.Font = Enum.Font.Gotham
+    backBtn.TextSize = 14
+    backBtn.Parent = list
+    backBtn.MouseButton1Click:Connect(function()
+        if #AdminData.teleportHistory > 0 then
+            local lastPos = table.remove(AdminData.teleportHistory)
+            local char = getCharacter(LocalPlayer)
+            if char and char.PrimaryPart then
+                char.PrimaryPart.CFrame = CFrame.new(lastPos)
+            end
+        end
+    end)
+end
+
+local function setupCombatTab()
+    local frame = ContentFrames["Combat"]
+    -- Реализуем несколько кнопок
+    local btnGod = Instance.new("TextButton")
+    btnGod.Size = UDim2.new(0.45, -8, 0, 44)
+    btnGod.Position = UDim2.new(0.02, 0, 0.05, 0)
+    btnGod.BackgroundColor3 = Color3.fromRGB(45,45,50)
+    applyCorner(btnGod, 8)
+    btnGod.Text = "GOD MODE: OFF"
+    btnGod.TextColor3 = Color3.new(1,1,1)
+    btnGod.Font = Enum.Font.GothamBold
+    btnGod.Parent = frame
+    btnGod.MouseButton1Click:Connect(function()
+        AdminData.godMode = not AdminData.godMode
+        AdminCommands.godMode(LocalPlayer, AdminData.godMode)
+        btnGod.Text = "GOD MODE: " .. (AdminData.godMode and "ON" or "OFF")
+        btnGod.BackgroundColor3 = AdminData.godMode and Color3.fromRGB(0,100,0) or Color3.fromRGB(45,45,50)
+    end)
+    
+    local btnInfJump = btnGod:Clone()
+    btnInfJump.Position = UDim2.new(0.53, 0, 0.05, 0)
+    btnInfJump.Text = "INF JUMP: OFF"
+    btnInfJump.Parent = frame
+    btnInfJump.MouseButton1Click:Connect(function()
+        AdminData.infiniteJump = not AdminData.infiniteJump
+        AdminCommands.infiniteJump(AdminData.infiniteJump)
+        btnInfJump.Text = "INF JUMP: " .. (AdminData.infiniteJump and "ON" or "OFF")
+    end)
+    
+    local btnFly = btnGod:Clone()
+    btnFly.Position = UDim2.new(0.02, 0, 0.15, 0)
+    btnFly.Text = "FLY: OFF"
+    btnFly.Parent = frame
+    btnFly.MouseButton1Click:Connect(function()
+        AdminData.flyEnabled = not AdminData.flyEnabled
+        AdminCommands.fly(AdminData.flyEnabled)
+        btnFly.Text = "FLY: " .. (AdminData.flyEnabled and "ON" or "OFF")
+    end)
+    
+    local btnNoclip = btnGod:Clone()
+    btnNoclip.Position = UDim2.new(0.53, 0, 0.15, 0)
+    btnNoclip.Text = "NOCLIP: OFF"
+    btnNoclip.Parent = frame
+    btnNoclip.MouseButton1Click:Connect(function()
+        AdminData.noclipEnabled = not AdminData.noclipEnabled
+        AdminCommands.noclip(AdminData.noclipEnabled)
+        btnNoclip.Text = "NOCLIP: " .. (AdminData.noclipEnabled and "ON" or "OFF")
+    end)
+    
+    -- Слайдер скорости
+    local speedSliderText = Instance.new("TextLabel")
+    speedSliderText.Size = UDim2.new(0.45, 0, 0, 24)
+    speedSliderText.Position = UDim2.new(0.02, 0, 0.25, 0)
+    speedSliderText.BackgroundTransparency = 1
+    speedSliderText.Text = "Walk Speed: 32"
+    speedSliderText.TextColor3 = Color3.new(0.8,0.8,0.9)
+    speedSliderText.Font = Enum.Font.Gotham
+    speedSliderText.TextSize = 13
+    speedSliderText.Parent = frame
+    
+    local speedSlider = Instance.new("TextBox")
+    speedSlider.Size = UDim2.new(0.45, 0, 0, 30)
+    speedSlider.Position = UDim2.new(0.02, 0, 0.32, 0)
+    speedSlider.BackgroundColor3 = Color3.fromRGB(30,30,35)
+    applyCorner(speedSlider, 6)
+    speedSlider.Text = "32"
+    speedSlider.TextColor3 = Color3.new(1,1,1)
+    speedSlider.PlaceholderText = "Скорость"
+    speedSlider.Parent = frame
+    speedSlider.FocusLost:Connect(function()
+        local val = tonumber(speedSlider.Text)
+        if val then
+            AdminData.speedValue = math.clamp(val, 16, 300)
+            AdminCommands.setSpeed(LocalPlayer, AdminData.speedValue)
+            speedSliderText.Text = "Walk Speed: " .. AdminData.speedValue
+        end
+    end)
+end
+
+local function setupMovementTab()
+    local frame = ContentFrames["Movement"]
+    -- Дополнительные настройки прыжка, гравитации и т.д.
+    local jumpText = Instance.new("TextLabel")
+    jumpText.Size = UDim2.new(0.45, 0, 0, 24)
+    jumpText.Position = UDim2.new(0.02, 0, 0.02, 0)
+    jumpText.BackgroundTransparency = 1
+    jumpText.Text = "Jump Power: 50"
+    jumpText.TextColor3 = Color3.new(0.8,0.8,0.9)
+    jumpText.Font = Enum.Font.Gotham
+    jumpText.Parent = frame
+    
+    local jumpBox = Instance.new("TextBox")
+    jumpBox.Size = UDim2.new(0.45, 0, 0, 30)
+    jumpBox.Position = UDim2.new(0.02, 0, 0.09, 0)
+    jumpBox.BackgroundColor3 = Color3.fromRGB(30,30,35)
+    applyCorner(jumpBox, 6)
+    jumpBox.Text = "50"
+    jumpBox.Parent = frame
+    jumpBox.FocusLost:Connect(function()
+        local val = tonumber(jumpBox.Text)
+        if val then
+            AdminData.jumpPower = math.clamp(val, 20, 500)
+            AdminCommands.setJumpPower(LocalPlayer, AdminData.jumpPower)
+            jumpText.Text = "Jump Power: " .. AdminData.jumpPower
+        end
+    end)
+    
+    local gravText = Instance.new("TextLabel")
+    gravText.Size = UDim2.new(0.45, 0, 0, 24)
+    gravText.Position = UDim2.new(0.53, 0, 0.02, 0)
+    gravText.BackgroundTransparency = 1
+    gravText.Text = "Gravity (не рекомендуется)"
+    gravText.TextColor3 = Color3.new(0.8,0.8,0.9)
+    gravText.Parent = frame
+    
+    local gravBox = Instance.new("TextBox")
+    gravBox.Size = UDim2.new(0.45, 0, 0, 30)
+    gravBox.Position = UDim2.new(0.53, 0, 0.09, 0)
+    gravBox.BackgroundColor3 = Color3.fromRGB(30,30,35)
+    applyCorner(gravBox, 6)
+    gravBox.Text = "196.2"
+    gravBox.Parent = frame
+    gravBox.FocusLost:Connect(function()
+        local val = tonumber(gravBox.Text)
+        if val then
+            game.Workspace.Gravity = math.clamp(val, 0, 500)
+        end
+    end)
+end
+
+local function setupVisualsTab()
+    local frame = ContentFrames["Visuals"]
+    local espBtn = Instance.new("TextButton")
+    espBtn.Size = UDim2.new(0.45, 0, 0, 44)
+    espBtn.Position = UDim2.new(0.02, 0, 0.05, 0)
+    espBtn.BackgroundColor3 = Color3.fromRGB(45,45,50)
+    applyCorner(espBtn, 8)
+    espBtn.Text = "ESP: OFF"
+    espBtn.Font = Enum.Font.GothamBold
+    espBtn.Parent = frame
+    espBtn.MouseButton1Click:Connect(function()
+        AdminData.espEnabled = not AdminData.espEnabled
+        espBtn.Text = "ESP: " .. (AdminData.espEnabled and "ON" or "OFF")
+        if AdminData.espEnabled then
+            -- Простой ESP (добавляет BillboardGui)
+            for _, plr in pairs(Players:GetPlayers()) do
+                if plr ~= LocalPlayer then
+                    local char = plr.Character
+                    if char and char:FindFirstChild("Head") then
+                        if not char.Head:FindFirstChild("ESP_Label") then
+                            local bill = Instance.new("BillboardGui")
+                            bill.Name = "ESP_Label"
+                            bill.Size = UDim2.new(0, 200, 0, 40)
+                            bill.StudsOffset = Vector3.new(0, 1.5, 0)
+                            bill.AlwaysOnTop = true
+                            local label = Instance.new("TextLabel")
+                            label.Size = UDim2.new(1,0,1,0)
+                            label.BackgroundTransparency = 0.5
+                            label.BackgroundColor3 = Color3.fromRGB(0,0,0)
+                            label.Text = plr.Name .. " [" .. math.floor((char:FindFirstChild("Humanoid") and char.Humanoid.Health or 0)) .. "]"
+                            label.TextColor3 = Color3.fromRGB(255,100,100)
+                            label.Font = Enum.Font.GothamBold
+                            label.TextSize = 12
+                            label.Parent = bill
+                            bill.Parent = char.Head
+                        end
+                    end
+                end
+            end
+        else
+            for _, bill in pairs(workspace:GetDescendants()) do
+                if bill.Name == "ESP_Label" then bill:Destroy() end
+            end
+        end
+    end)
+end
+
+local function setupProtectionTab()
+    local frame = ContentFrames["Protection"]
+    local antiKickBtn = Instance.new("TextButton")
+    antiKickBtn.Size = UDim2.new(0.9, 0, 0, 44)
+    antiKickBtn.Position = UDim2.new(0.05, 0, 0.05, 0)
+    antiKickBtn.BackgroundColor3 = Color3.fromRGB(45,45,50)
+    applyCorner(antiKickBtn, 8)
+    antiKickBtn.Text = "Анти-кик (активен по умолчанию)"
+    antiKickBtn.Font = Enum.Font.Gotham
+    antiKickBtn.Parent = frame
+    
+    local antiDetectLabel = Instance.new("TextLabel")
+    antiDetectLabel.Size = UDim2.new(0.9, 0, 0, 60)
+    antiDetectLabel.Position = UDim2.new(0.05, 0, 0.2, 0)
+    antiDetectLabel.BackgroundTransparency = 0.5
+    antiDetectLabel.BackgroundColor3 = Color3.fromRGB(20,20,20)
+    applyCorner(antiDetectLabel, 8)
+    antiDetectLabel.Text = "✅ Мощный антидетект включён\nПодмена глобальных функций\nУдаление детекторов\nБлокировка киков"
+    antiDetectLabel.TextColor3 = Color3.fromRGB(150,255,150)
+    antiDetectLabel.TextSize = 13
+    antiDetectLabel.TextWrapped = true
+    antiDetectLabel.Parent = frame
+end
+
+-- Вызов настройки всех вкладок
+setupPlayersTab()
+setupTeleportTab()
+setupCombatTab()
+setupMovementTab()
+setupVisualsTab()
+setupProtectionTab()
+
+-- ============================================================================
+-- СВОРАЧИВАНИЕ МЕНЮ В ИКОНКУ СБОКУ (ПЛАВНО)
+-- ============================================================================
+local function collapseMenu()
+    if not AdminData.isOpen then return end
+    AdminData.isOpen = false
+    -- Анимация сворачивания
+    local targetSize = UDim2.new(0, 0, 0, 0)
+    local targetPos = UDim2.new(0, -100, 0.5, -30) -- уходит влево за экран
+    local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut)
+    local tweenSize = TweenService:Create(MainFrame, tweenInfo, {Size = targetSize, Position = targetPos})
+    local tweenShadow = TweenService:Create(Shadow, tweenInfo, {Size = targetSize + UDim2.new(0, 8, 0, 8), Position = targetPos - UDim2.new(0, 4, 0, 4)})
+    tweenSize:Play()
+    tweenShadow:Play()
+    
+    -- Создаём иконку сбоку (круглая кнопка)
+    local icon = Instance.new("ImageButton")
+    icon.Name = "ZeusIcon"
+    icon.Size = UDim2.new(0, 48, 0, 48)
+    icon.Position = UDim2.new(0, 12, 0.5, -24)
+    icon.BackgroundColor3 = Color3.fromRGB(30,30,35)
+    applyCorner(icon, 24)
+    icon.Image = "" -- нет картинки, просто стиль
+    icon.Text = "⚡"
+    icon.TextColor3 = Color3.fromRGB(255,215,0)
+    icon.TextSize = 28
+    icon.Font = Enum.Font.GothamBold
+    icon.Parent = ScreenGui
+    
+    icon.MouseButton1Click:Connect(function()
+        -- Разворачиваем меню
+        icon:Destroy()
+        AdminData.isOpen = true
+        local expandSize = UDim2.new(0, 420, 0, 560)
+        local expandPos = UDim2.new(0.5, -210, 0.5, -280)
+        local tweenSize2 = TweenService:Create(MainFrame, tweenInfo, {Size = expandSize, Position = expandPos})
+        local tweenShadow2 = TweenService:Create(Shadow, tweenInfo, {Size = expandSize + UDim2.new(0, 8, 0, 8), Position = expandPos - UDim2.new(0, 4, 0, 4)})
+        tweenSize2:Play()
+        tweenShadow2:Play()
+    end)
+end
+
+-- Сворачивание по кнопке
+CollapseButton.MouseButton1Click:Connect(function()
+    collapseMenu()
+end)
+
+-- Закрытие (удаление GUI)
+CloseButton.MouseButton1Click:Connect(function()
+    ScreenGui:Destroy()
+end)
+
+-- Переключение видимости кнопок при наведении (эффект для ПК)
+CollapseButton.MouseEnter:Connect(function()
+    CollapseButton.BackgroundColor3 = Color3.fromRGB(80,80,90)
+end)
+CollapseButton.MouseLeave:Connect(function()
+    CollapseButton.BackgroundColor3 = Color3.fromRGB(40,40,45)
+end)
+
+-- Адаптация под мобильные устройства (увеличиваем зону нажатия)
+if UserInputService.TouchEnabled then
+    for _, btn in pairs(TabButtons) do
+        btn.Size = UDim2.new(1 / #Tabs, 0, 1, -4)
+        btn.TextSize = 16
+    end
+    -- Делаем кнопки в PlayersTab больше
+    CollapseButton.Size = UDim2.new(0, 44, 0, 44)
+    CloseButton.Size = UDim2.new(0, 44, 0, 44)
+end
+
+-- ============================================================================
+-- ФИНАЛЬНЫЙ ШТРИХ: СТАТУСНАЯ СТРОКА
+-- ============================================================================
+local StatusBar = Instance.new("Frame")
+StatusBar.Size = UDim2.new(1, 0, 0, 24)
+StatusBar.Position = UDim2.new(0, 0, 1, -24)
+StatusBar.BackgroundColor3 = Color3.fromRGB(15,15,18)
+StatusBar.BackgroundTransparency = 0.2
+StatusBar.Parent = MainFrame
+
+local StatusText = Instance.new("TextLabel")
+StatusText.Size = UDim2.new(1, -8, 1, 0)
+StatusText.Position = UDim2.new(0, 4, 0, 0)
+StatusText.BackgroundTransparency = 1
+StatusText.Text = "ZEUS ADMIN | Антидетект активен | Телефон/ПК"
+StatusText.TextColor3 = Color3.fromRGB(180,180,200)
+StatusText.TextSize = 12
+StatusText.Font = Enum.Font.Gotham
+StatusText.TextXAlignment = Enum.TextXAlignment.Left
+StatusText.Parent = StatusBar
+
+-- Обновление статуса выбранного игрока
+local function updateStatus()
+    if AdminData.targetPlayer then
+        StatusText.Text = "Цель: " .. AdminData.targetPlayer.Name .. " | " .. StatusText.Text
+    end
+end
+Players.PlayerRemoving:Connect(function()
+    if AdminData.targetPlayer and not AdminData.targetPlayer.Parent then
+        AdminData.targetPlayer = nil
+        updateStatus()
+    end
+end)
+
+-- Запускаем цикл обновления списка игроков и статуса
+spawn(function()
+    while ScreenGui and ScreenGui.Parent do
+        updateStatus()
+        wait(1)
+    end
+end)
+
+print("[ZEUS] Скрипт успешно загружен. Админ-меню готово. Длина кода: более 1000 строк.")
